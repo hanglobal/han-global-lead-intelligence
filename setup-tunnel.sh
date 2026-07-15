@@ -7,7 +7,7 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$PROJECT_ROOT/config.yml"
-CREDS_DIR="/home/owais/.cloudflared"
+CREDS_DIR="/root/.cloudflared"
 TUNNEL_NAME="hgcrm-lead"
 
 echo "Setting up Cloudflare Tunnel..."

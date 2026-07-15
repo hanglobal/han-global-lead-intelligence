@@ -224,4 +224,4 @@ gunicorn config.wsgi:application --bind 0.0.0.0:8000
 
 
 
-cloudflared tunnel --config /home/owais/reli/config.yml run
+cloudflared tunnel --config /var/www/han-global-lead-intelligence/config.yml run

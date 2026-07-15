@@ -5,7 +5,7 @@
 # cloudflared tunnel create real-estate-lead
 
 tunnel: 417459ac-f84d-44a4-b328-330a8a9f09c6
-credentials-file: /home/owais/.cloudflared/417459ac-f84d-44a4-b328-330a8a9f09c6.json
+credentials-file: /root/.cloudflared/417459ac-f84d-44a4-b328-330a8a9f09c6.json
 
 # Ingress rules - routes incoming requests to local services
 ingress:

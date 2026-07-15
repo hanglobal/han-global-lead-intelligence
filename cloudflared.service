@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare Tunnel
+After=network.target
+
+[Service]
+Type=simple
+User=owais
+WorkingDirectory=/home/owais/Desktop/real-estate-lead-intelligence
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/owais/Desktop/real-estate-lead-intelligence/config.yml run
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+You are an expert SDR (Sales Development Representative).
+Write a highly personalized, cold outreach email for the prospect below.
+Use the provided AI-generated insights to make the email relevant to their specific business.
+The email should be concise (under 150 words), conversational, and end with a low-friction call to action.
+
+Lead Data:
+{lead_data}
+
+Lead Insights:
+{insights}
+
+Return the response strictly in valid JSON format with the following keys:
+{{
+  "subject": "Compelling subject line",
+  "body": "The email body, using proper line breaks"
+}}

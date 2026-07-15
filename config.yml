@@ -1,0 +1,21 @@
+# Cloudflare Tunnel Configuration
+# For production deployment with custom domain
+
+# Replace <tunnel-id> with your actual tunnel ID after running:
+# cloudflared tunnel create real-estate-lead
+
+tunnel: 417459ac-f84d-44a4-b328-330a8a9f09c6
+credentials-file: /home/owais/.cloudflared/417459ac-f84d-44a4-b328-330a8a9f09c6.json
+
+# Ingress rules - routes incoming requests to local services
+ingress:
+  # Domain for frontend (Next.js)
+  - hostname: apps.hgcrmsolutions.com
+    service: http://localhost:5000
+
+  # Domain for API (Django backend)
+  - hostname: apis-app.hgcrmsolutions.com
+    service: http://localhost:5050
+
+  # Default fallback
+  - service: http_status:404

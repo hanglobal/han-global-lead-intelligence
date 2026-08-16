@@ -13,33 +13,44 @@ class AIClient:
         self.ollama_model = os.environ.get('OLLAMA_MODEL', 'llama3')
         self.ollama_api_key = os.environ.get('OLLAMA_API_KEY')
         self.anthropic_api_key = os.environ.get('ANTHROPIC_API_KEY')
-        
-        self.prompts_dir = Path(__file__).parent / 'prompts'
-        
-        self.insight_prompt_template = self._load_prompt('insight_prompt.txt')
-        self.email_draft_prompt_template = self._load_prompt('email_draft_prompt.txt')
-
-    def _load_prompt(self, filename: str) -> str:
-        filepath = self.prompts_dir / filename
-        if filepath.exists():
-            return filepath.read_text(encoding='utf-8')
-        return ""
 
     def generate_insights(self, lead_data: dict) -> dict:
-        prompt = self.insight_prompt_template.format(lead_data=json.dumps(lead_data, indent=2))
+        from apps.crm.models import LeadQualificationSettings
+        settings = LeadQualificationSettings.get_settings()
+        rules = settings.insight_generation_rules
         
-        response_text = self._call_ai(prompt, system_prompt="You are an expert sales analyst. Always return strictly valid JSON.")
+        system_prompt = (
+            "You are an expert sales analyst for a B2B SaaS company.\n"
+            "Return the response in strictly valid JSON format with the following keys:\n"
+            '{\n  "pain_points": "detailed string",\n  "operational_gap": "detailed string",\n  "opportunity": "detailed string"\n}'
+        )
         
+        prompt = (
+            f"--- INSTRUCTIONS ---\n{rules}\n\n"
+            f"--- LEAD DATA ---\n{json.dumps(lead_data, indent=2)}"
+        )
+        
+        response_text = self._call_ai(prompt, system_prompt=system_prompt)
         return self._parse_json(response_text, ["pain_points", "operational_gap", "opportunity"])
 
     def generate_email_draft(self, lead_data: dict, insights: dict) -> dict:
-        prompt = self.email_draft_prompt_template.format(
-            lead_data=json.dumps(lead_data, indent=2),
-            insights=json.dumps(insights, indent=2)
+        from apps.crm.models import LeadQualificationSettings
+        settings = LeadQualificationSettings.get_settings()
+        rules = settings.email_generation_rules
+        
+        system_prompt = (
+            "You are an expert SDR (Sales Development Representative).\n"
+            "Return the response strictly in valid JSON format with the following keys:\n"
+            '{\n  "subject": "Compelling subject line",\n  "body": "The email body, using proper line breaks"\n}'
         )
         
-        response_text = self._call_ai(prompt, system_prompt="You are an expert SDR. Always return strictly valid JSON.")
+        prompt = (
+            f"--- INSTRUCTIONS ---\n{rules}\n\n"
+            f"--- LEAD DATA ---\n{json.dumps(lead_data, indent=2)}\n\n"
+            f"--- LEAD INSIGHTS ---\n{json.dumps(insights, indent=2)}"
+        )
         
+        response_text = self._call_ai(prompt, system_prompt=system_prompt)
         return self._parse_json(response_text, ["subject", "body"])
 
     def consolidate_lead_data(self, cr) -> bool:
@@ -57,48 +68,58 @@ class AIClient:
         settings = LeadQualificationSettings.get_settings()
         agency_services = settings.agency_services
         
-        
         prompt = (
-            "You are an expert data analyst and consolidation engine.\n"
-            "I am providing you with two raw JSON datasets for a single company: one from Google Maps and one from their Website Scrape.\n"
-            "Your task is to analyze both, combine their data, and generate a clean JSON output containing all the necessary fields for our CRM.\n\n"
-            f"Here are the services our agency provides: '{agency_services}'. You must evaluate if this company is an ideal customer for us.\n\n"
-            "Requirements for the output JSON (use exactly these keys, provide null if data is not found):\n"
-            'IMPORTANT RULES FOR VALUES:\n'
-            '- Clean all URLs: Remove all UTM parameters, query strings, and extra tracking mess. Keep only the core, clean URL.\n'
-            '- Multiple Values: If you find multiple phone numbers, emails, or social media URLs, join them with a comma (", ") and return them as a single string. DO NOT return an array for these fields.\n\n'
+            "You are an expert data analyst and B2B lead qualification engine.\n"
+            "You have been given two raw JSON datasets for a single company: one from Google Maps and one from their Website Scrape.\n"
+            "Your job is to do two things:\n"
+            "1. Extract and consolidate clean, structured data from both sources into a single JSON output for our CRM.\n"
+            "2. Evaluate whether this company qualifies as an ideal customer based STRICTLY on the qualification criteria provided below.\n\n"
+            "--- QUALIFICATION CRITERIA (provided by the user) ---\n"
+            f"{agency_services}\n"
+            "--- END CRITERIA ---\n\n"
+            "CRITICAL ANALYSIS RULES (follow these relaxed guidelines):\n"
+            "- Use your best judgment based on the provided data. You can make reasonable inferences about a business's operations based on their website and Google Maps presence.\n"
+            "- Team Size: If explicit evidence of a team (like a team page) is missing, you MAY assume they have sufficient operational complexity if they have a healthy review count, active listings, or professional branding.\n"
+            "- Pain Points: Do NOT demand explicit proof of CRM problems on their public website. Instead, intelligently evaluate their current tech stack (if visible in the data), their business size, and operational complexity. If they use basic tools or no visible CRM, they likely need help. If they use a known CRM, consider if they might need advanced workflow automation or AI solutions based on their scale. Make a reasoned, balanced judgment without requiring them to explicitly state their operational failures.\n"
+            "- Industry: Industry classification should be broad. As long as their primary operations involve real estate (agency, property management, investing, etc.), consider them in the industry.\n"
+            "- Give the benefit of the doubt: If the data strongly suggests they are an active real estate business, set is_ideal_customer to true even if some minor details (like exact team size or current tech stack) are unclear or missing.\n\n"
+            "DATA EXTRACTION RULES:\n"
+            "- Clean all URLs: Remove UTM parameters, query strings, and tracking fragments. Keep only the core clean URL.\n"
+            "- Multiple values: Join multiple phone numbers, emails, or social URLs with a comma as a single string. Do NOT return arrays.\n"
+            "- If a field is not present in either dataset, set it to null.\n\n"
+            "Output JSON fields (use exactly these keys):\n"
             '1. "name": The cleanest version of the company name.\n'
-            '2. "category": The business category (e.g., Real estate agent).\n'
-            '3. "rating": The average rating (float).\n'
-            '4. "review_count": Total number of reviews (integer).\n'
-            '5. "price_level": Price level if available.\n'
+            '2. "category": The business category as found in the data (e.g., Real estate agent, Property management company).\n'
+            '3. "rating": The average Google Maps rating (float). Null if not found.\n'
+            '4. "review_count": Total number of Google Maps reviews (integer). Null if not found.\n'
+            '5. "price_level": Price level if available. Null otherwise.\n'
             '6. "address": The full address.\n'
             '7. "street_address": Just the street part of the address.\n'
-            '8. "neighborhood": Neighborhood or district.\n'
+            '8. "neighborhood": Neighborhood or district. Null if not found.\n'
             '9. "city": City.\n'
-            '10. "postal_code": Zip or postal code.\n'
-            '11. "latitude": Latitude (float).\n'
-            '12. "longitude": Longitude (float).\n'
-            '13. "phone": All valid phone numbers, comma separated.\n'
-            '14. "company_email": All valid emails found, comma separated.\n'
-            '15. "website": The clean website URL.\n'
-            '16. "google_maps_url": The clean Google Maps URL.\n'
-            '17. "facebook_url": Clean Facebook page URLs, comma separated.\n'
-            '18. "twitter_url": Clean Twitter/X page URLs, comma separated.\n'
-            '19. "instagram_url": Clean Instagram page URLs, comma separated.\n'
-            '20. "linkedin_url": Clean LinkedIn page URLs, comma separated.\n'
-            '21. "youtube_url": Clean YouTube channel URLs, comma separated.\n'
-            '22. "tiktok_url": Clean TikTok URLs, comma separated.\n'
-            '23. "pinterest_url": Clean Pinterest URLs, comma separated.\n'
-            '24. "company_summary": A short, clear paragraph (2-3 sentences) summarizing what the company does based on the website data.\n'
-            '25. "working_hours": A clear, concise summary of their business or working hours (e.g., "Mon-Fri: 9am-5pm" or "Open 24/7").\n'
-            '26. "is_ideal_customer": true if they seem like a good fit for our agency services, false otherwise. If our agency services are empty, return true.\n'
-            '27. "qualification_reasoning": A 1-2 sentence explanation of why they are or are not a good fit based on their data and our services.\n\n'
-            f"Here is the raw data:\n{json.dumps(payload, indent=2)}\n\n"
-            "Respond ONLY with strictly valid JSON. Do not include any conversational text or markdown blocks outside the JSON."
+            '10. "postal_code": Zip or postal code. Null if not found.\n'
+            '11. "latitude": Latitude (float). Null if not found.\n'
+            '12. "longitude": Longitude (float). Null if not found.\n'
+            '13. "phone": All valid phone numbers found in both sources, comma separated.\n'
+            '14. "company_email": All valid business emails found in both sources, comma separated. Exclude personal or noreply emails if clearly identifiable.\n'
+            '15. "website": The clean, canonical website URL.\n'
+            '16. "google_maps_url": The clean Google Maps URL for this business.\n'
+            '17. "facebook_url": Clean Facebook page URL(s), comma separated. Null if not found.\n'
+            '18. "twitter_url": Clean Twitter/X page URL(s), comma separated. Null if not found.\n'
+            '19. "instagram_url": Clean Instagram page URL(s), comma separated. Null if not found.\n'
+            '20. "linkedin_url": Clean LinkedIn company page URL(s), comma separated. Null if not found.\n'
+            '21. "youtube_url": Clean YouTube channel URL(s), comma separated. Null if not found.\n'
+            '22. "tiktok_url": Clean TikTok URL(s), comma separated. Null if not found.\n'
+            '23. "pinterest_url": Clean Pinterest URL(s), comma separated. Null if not found.\n'
+            '24. "company_summary": A factual 2 to 3 sentence summary of what this company does, written entirely from what is visible in the provided website and Google Maps data. Do not add anything that is not in the data.\n'
+            '25. "working_hours": A concise summary of business hours as found in the data (e.g., "Mon-Fri: 9am-5pm"). Null if not available.\n'
+            '26. "is_ideal_customer": true only if the company clearly passes all qualification criteria based on the available data. false if they fail any criterion or if the available data is insufficient to confirm qualification.\n'
+            '27. "qualification_reasoning": A detailed 5 to 7 line explanation of your qualification decision. You must: (a) state which criteria the company passes and which it fails, (b) cite specific data points from the provided datasets that support each claim, (c) explicitly note any information that was missing and how that affected your decision. Do not invent evidence. Be precise and fully grounded in the data.\n\n'
+            f"Here is the raw data to analyze:\n{json.dumps(payload, indent=2)}\n\n"
+            "Respond ONLY with strictly valid JSON matching the fields above. Do not include any text, commentary, or markdown outside the JSON object."
         )
         
-        response_text = self._call_ai(prompt, system_prompt="You are a strict JSON data processor. You must merge datasets and return valid JSON only.")
+        response_text = self._call_ai(prompt, system_prompt="You are a strict JSON data processor and lead qualification engine. You analyze only the data provided to you and return valid JSON only. You never assume or invent details not present in the input data.")
         
         expected_keys = [
             "name", "category", "rating", "review_count", "price_level", "address", 
@@ -135,9 +156,10 @@ class AIClient:
             "1. 'decision_makers_ids': a list of up to 2 IDs of the top decision makers.\n"
             "2. 'linkedin_scrape_id': the single ID of the most superior person from the chosen decision makers (e.g., prioritize CEO over CTO). This is the person whose profile is most important to scrape.\n"
             "Follow these rules:\n"
-            "- First priority MUST be CEO and CTO. If they are found, select them.\n"
-            "- If CEO and CTO are not present, then select the next two most superior people (e.g., Founders, Owners, Presidents, VP, Directors).\n"
-            "- If all employees are low-level (e.g. real estate agents, associates, interns, admin), return an empty list [] and null.\n"
+            "- First priority MUST be CEO, Founders, Owners, Presidents, or C-Suite. If they are found, select them.\n"
+            "- If they are not present, then select the next most senior people (e.g., Directors, VPs, Managing Brokers).\n"
+            "- If only Real Estate Agents, Realtors, or Associates are present, DO NOT return an empty list. Simply pick up to 2 of the most relevant agents/brokers.\n"
+            "- Only return an empty list if literally no employees are provided.\n"
             "- Output ONLY valid JSON."
         )
         
@@ -154,6 +176,38 @@ class AIClient:
             "decision_makers_ids": parsed.get("decision_makers_ids", [])[:2],
             "linkedin_scrape_id": parsed.get("linkedin_scrape_id")
         }
+
+    def calculate_lead_score(self, lead_data: dict, scoring_rules: str) -> dict:
+        """
+        Takes lead data and dynamic scoring rules set by the user.
+        Asks the LLM to calculate a score between 0 and 100 based on those rules.
+        Returns a dict: {'score': 85}
+        """
+        system_prompt = (
+            "You are an expert sales operations lead scoring engine. Your job is to calculate a lead score based strictly on the provided scoring rules.\n"
+            "You must output ONLY valid JSON containing a single key 'score' with an integer value between 0 and 100.\n"
+            "Calculate the score carefully based on the lead's data. If data is missing for a rule, do not add those points.\n"
+            "Ensure the final score is capped at 100."
+        )
+        
+        prompt = (
+            f"--- LEAD DATA ---\n{json.dumps(lead_data, indent=2)}\n\n"
+            f"--- SCORING RULES ---\n{scoring_rules}\n\n"
+            "Based on the above rules, calculate the total score for this lead and return ONLY valid JSON in this format: {\"score\": 0}"
+        )
+        
+        response_text = self._call_ai(prompt, system_prompt=system_prompt)
+        parsed = self._parse_json(response_text, ["score"])
+        
+        if not parsed or not isinstance(parsed.get("score"), (int, float)):
+            logger.error(f"Failed to parse score from LLM. Output: {parsed}")
+            try:
+                score = int(float(parsed.get("score", 0)))
+            except:
+                score = 0
+            return {"score": min(score, 100)}
+            
+        return {"score": min(int(parsed.get("score", 0)), 100)}
 
     def _call_ai(self, prompt: str, system_prompt: str) -> str:
         """Tries Ollama first, falls back to Claude if Ollama fails."""

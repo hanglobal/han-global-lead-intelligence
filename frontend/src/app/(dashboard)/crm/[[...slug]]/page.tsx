@@ -78,19 +78,12 @@ export default function CRMPage() {
   const [hasPhone, setHasPhone] = useState(false);
   const [scoreMin, setScoreMin] = useState<number | ''>('');
   const [scoreMax, setScoreMax] = useState<number | ''>('');
-  const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, new: 0, qualified: 0, unqualified: 0 });
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showLeadModal, setShowLeadModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<any[]>([]);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importStats, setImportStats] = useState<{ total: number; batch_duplicates: number; crm_duplicates: number; unique_to_import: number } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showExportModal, setShowExportModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [scoring, setScoring] = useState(false);
 
@@ -181,99 +174,85 @@ export default function CRMPage() {
   };
 
   const categories = Array.from(new Set(leads.map(l => l.category).filter(Boolean)));
-  const sources = Array.from(new Set(leads.map(l => l.source).filter((s): s is string => !!s)));
 
   const filteredLeads = leads.filter(lead => {
-    const matchSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const s = searchTerm.toLowerCase();
+    const searchString = `${lead.name} ${lead.company_phone || ''} ${lead.company_email || ''} ${lead.lid || ''} ${JSON.stringify(lead.raw_data || {})} ${JSON.stringify(lead.crm_signals || {})}`.toLowerCase();
+    const matchSearch = !searchTerm || searchString.includes(s);
+    
     const matchStatus = statusFilter.size === 0 || statusFilter.has(lead.status);
-    const matchRating = (!ratingMin || (lead.rating || 0) >= ratingMin) && (!ratingMax || (lead.rating || 0) <= ratingMax);
-    const matchReview = (!reviewMin || (lead.review_count || 0) >= reviewMin) && (!reviewMax || (lead.review_count || 0) <= reviewMax);
+    const matchRating = (ratingMin === '' || (lead.rating ?? 0) >= ratingMin) && (ratingMax === '' || (lead.rating ?? 0) <= ratingMax);
+    const matchReview = (reviewMin === '' || (lead.review_count ?? 0) >= reviewMin) && (reviewMax === '' || (lead.review_count ?? 0) <= reviewMax);
     const matchCat = categoryFilter.size === 0 || (lead.category && categoryFilter.has(lead.category));
     const matchCampaign = campaignFilter.size === 0 || (lead.campaign_id && campaignFilter.has(lead.campaign_id));
     const matchLeadId = leadIdFilter.size === 0 || (lead.lid && leadIdFilter.has(lead.lid));
-    const matchEmail = !hasEmail || !!lead.company_email;
+    
+    const hasAnyEmail = !!lead.company_email || 
+      !!lead.crm_signals?.decision_maker_email || 
+      !!lead.crm_signals?.personal_email ||
+      (lead.raw_data?.emails && lead.raw_data.emails.length > 0) ||
+      (lead.raw_data?.decision_makers && lead.raw_data.decision_makers.some((dm: any) => dm.email));
+    
+    const matchEmail = !hasEmail || hasAnyEmail;
+    
     const matchPhone = !hasPhone || !!lead.company_phone;
-    const matchScore = (!scoreMin || (lead.score ?? 0) >= scoreMin) && (!scoreMax || (lead.score ?? 0) <= scoreMax);
-    const matchSource = sourceFilter.size === 0 || (lead.source && sourceFilter.has(lead.source));
-    return matchSearch && matchStatus && matchRating && matchReview && matchCat && matchCampaign && matchLeadId && matchEmail && matchPhone && matchScore && matchSource;
+    const matchScore = (scoreMin === '' || (lead.score ?? 0) >= scoreMin) && (scoreMax === '' || (lead.score ?? 0) <= scoreMax);
+    
+    return matchSearch && matchStatus && matchRating && matchReview && matchCat && matchCampaign && matchLeadId && matchEmail && matchPhone && matchScore;
   });
 
   const toggleStatus = (s: string) => { const n = new Set(statusFilter); n.has(s) ? n.delete(s) : n.add(s); setStatusFilter(n); };
   const toggleCategory = (c: string) => { const n = new Set(categoryFilter); n.has(c) ? n.delete(c) : n.add(c); setCategoryFilter(n); };
   const toggleCampaign = (c: string) => { const n = new Set(campaignFilter); n.has(c) ? n.delete(c) : n.add(c); setCampaignFilter(n); };
   const toggleLeadId = (lid: string) => { const n = new Set(leadIdFilter); n.has(lid) ? n.delete(lid) : n.add(lid); setLeadIdFilter(n); };
-  const toggleSource = (s: string) => { const n = new Set(sourceFilter); n.has(s) ? n.delete(s) : n.add(s); setSourceFilter(n); };
-  const clearAllFilters = () => { setStatusFilter(new Set()); setRatingMin(''); setRatingMax(''); setReviewMin(''); setReviewMax(''); setCategoryFilter(new Set()); setCampaignFilter(new Set()); setLeadIdFilter(new Set()); setHasEmail(false); setHasPhone(false); setScoreMin(''); setScoreMax(''); setSourceFilter(new Set()); };
-  const hasActiveFilters = statusFilter.size > 0 || !!ratingMin || !!ratingMax || !!reviewMin || !!reviewMax || categoryFilter.size > 0 || campaignFilter.size > 0 || leadIdFilter.size > 0 || hasEmail || hasPhone || !!scoreMin || !!scoreMax || sourceFilter.size > 0;
-  const activeFilterCount = (statusFilter.size > 0 ? 1 : 0) + (ratingMin || ratingMax ? 1 : 0) + (reviewMin || reviewMax ? 1 : 0) + (categoryFilter.size > 0 ? 1 : 0) + (campaignFilter.size > 0 ? 1 : 0) + (leadIdFilter.size > 0 ? 1 : 0) + (hasEmail ? 1 : 0) + (hasPhone ? 1 : 0) + (scoreMin || scoreMax ? 1 : 0) + (sourceFilter.size > 0 ? 1 : 0);
+  const clearAllFilters = () => { setStatusFilter(new Set()); setRatingMin(''); setRatingMax(''); setReviewMin(''); setReviewMax(''); setCategoryFilter(new Set()); setCampaignFilter(new Set()); setLeadIdFilter(new Set()); setHasEmail(false); setHasPhone(false); setScoreMin(''); setScoreMax(''); };
+  const hasActiveFilters = statusFilter.size > 0 || ratingMin !== '' || ratingMax !== '' || reviewMin !== '' || reviewMax !== '' || categoryFilter.size > 0 || campaignFilter.size > 0 || leadIdFilter.size > 0 || hasEmail || hasPhone || scoreMin !== '' || scoreMax !== '';
+  const activeFilterCount = (statusFilter.size > 0 ? 1 : 0) + (ratingMin !== '' || ratingMax !== '' ? 1 : 0) + (reviewMin !== '' || reviewMax !== '' ? 1 : 0) + (categoryFilter.size > 0 ? 1 : 0) + (campaignFilter.size > 0 ? 1 : 0) + (leadIdFilter.size > 0 ? 1 : 0) + (hasEmail ? 1 : 0) + (hasPhone ? 1 : 0) + (scoreMin !== '' || scoreMax !== '' ? 1 : 0);
   const toggleLeadSelection = (id: number) => { const n = new Set(selectedLeads); n.has(id) ? n.delete(id) : n.add(id); setSelectedLeads(n); };
   const toggleAllSelection = () => setSelectedLeads(selectedLeads.size === filteredLeads.length ? new Set() : new Set(filteredLeads.map(l => l.id)));
 
-  const handleExport = () => {
-    const headers = ['name', 'category', 'company_phone', 'email', 'address', 'website', 'rating', 'review_count', 'status'];
-    const rows = filteredLeads.map(l => [l.name, l.category, l.company_phone, l.company_email, l.address, l.website, l.rating, l.review_count, l.status].map(f => `"${String(f || '').replace(/"/g, '""')}"`));
+  const handleExportCSV = () => {
+    const leadsToExport = selectedLeads.size > 0 ? filteredLeads.filter(l => selectedLeads.has(l.id)) : filteredLeads;
+    const headers = [
+      'id', 'lid', 'name', 'category', 'status', 'stage', 'score', 'score_label', 
+      'company_phone', 'company_email', 'address', 'website', 'google_maps_url',
+      'rating', 'review_count', 'campaign_id', 'source_campaign_id',
+      'facebook_url', 'twitter_url', 'linkedin_url', 'instagram_url',
+      'crm_signals', 'raw_data', 'created_at'
+    ];
+    const rows = leadsToExport.map(l => {
+      return headers.map(h => {
+        const val = (l as any)[h];
+        if (val === null || val === undefined) return '""';
+        if (typeof val === 'object') return `"${JSON.stringify(val).replace(/"/g, '""')}"`;
+        return `"${String(val).replace(/"/g, '""')}"`;
+      }).join(',');
+    });
+    
     const csv = [headers.join(','), ...rows].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `leads-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    a.download = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}.csv`;
+    
     a.click();
-    setMenuOpen(false);
+    setShowExportModal(false);
   };
 
-  const parseCSV = (text: string): any[] => {
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    return lines.slice(1).map(line => {
-      const values = line.match(/("[^"]*"|[^,]*)/g) || [];
-      const row: any = {};
-      headers.forEach((h, i) => { row[h] = (values[i] || '').trim().replace(/^"|"$/g, '').replace(/""/g, '"'); });
-      return row;
-    });
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportFile(file);
-    setImportErrors([]);
-    setImportStats(null);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        let data: any[] = file.name.endsWith('.json') ? JSON.parse(ev.target?.result as string) : parseCSV(ev.target?.result as string);
-        if (!Array.isArray(data)) data = [data];
-        const errors: string[] = [];
-        const ts = Date.now();
-        const mapped = data.map((item, idx) => {
-          const m: any = { place_id: item.place_id || item.placeId || `import-${ts}-${idx}`, name: item.name || item.title || '', address: item.address || '', street_address: item.street_address || item.street || '', neighborhood: item.neighborhood || '', city: item.city || '', postal_code: item.postal_code || item.postalCode || '', company_phone: item.company_phone || item.phone || '', source: item.source || item.phone_unformatted || item.phoneUnformatted || '', website: item.website || '', google_maps_url: item.google_maps_url || item.url || '', company_email: item.company_email || item.email || '', rating: item.rating || item.totalScore || null, review_count: item.review_count || 0, price_level: item.price_level || item.price || null, category: item.category || item.categoryName || '', fid: item.fid || '', latitude: item.latitude || null, longitude: item.longitude || null, scraped_at: item.scraped_at || item.scrapedAt || new Date().toISOString(), status: 'new' };
-          if (!m.name) errors.push(`Row ${idx + 1}: Missing name`);
-          return m;
-        });
-        setImportPreview(mapped);
-        setImportErrors(errors);
-        if (!errors.length && mapped.length) {
-          try {
-            const r = await axios.post('/api/crm/leads/bulk-import/?validate=true', mapped);
-            setImportStats(r.data);
-          } catch { /* validation call failed, allow import anyway */ }
-        }
-      } catch { setImportErrors(['Failed to parse file.']); }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleImport = async () => {
-    if (!importPreview.length || importErrors.length) return;
-    setImporting(true);
-    try {
-      await axios.post('/api/crm/leads/bulk-import/', importPreview);
-      await fetchLeads(); await fetchStats();
-      setImporting(false); setShowImportModal(false); setImportFile(null); setImportPreview([]);
-    } catch (e: any) {
-      setImportErrors([e.response?.data?.error || 'Import failed']);
-      setImporting(false);
-    }
+  const handleExportJSON = () => {
+    const leadsToExport = selectedLeads.size > 0 ? filteredLeads.filter(l => selectedLeads.has(l.id)) : filteredLeads;
+    const jsonStr = JSON.stringify(leadsToExport, null, 2);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([jsonStr], { type: 'application/json' }));
+    
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    a.download = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}_${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}.json`;
+    
+    a.click();
+    setShowExportModal(false);
   };
 
   const handleDelete = async () => {
@@ -304,8 +283,6 @@ export default function CRMPage() {
           hasPhone={hasPhone}
           scoreMin={scoreMin}
           scoreMax={scoreMax}
-          sources={sources}
-          sourceFilter={sourceFilter}
           hasActiveFilters={hasActiveFilters}
           onToggleStatus={toggleStatus}
           onToggleCategory={toggleCategory}
@@ -319,7 +296,6 @@ export default function CRMPage() {
           onHasPhoneChange={setHasPhone}
           onScoreMinChange={setScoreMin}
           onScoreMaxChange={setScoreMax}
-          onToggleSource={toggleSource}
           onClearAll={clearAllFilters}
         />
 
@@ -400,11 +376,8 @@ export default function CRMPage() {
                 </button>
                 {menuOpen && (
                   <div className="absolute right-0 mt-1.5 w-44 bg-zinc-900 border border-zinc-800 rounded-lg shadow-card py-1 z-50">
-                    <button onClick={() => { setShowImportModal(true); setMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                      Import leads
-                    </button>
-                    <button onClick={handleExport} className="w-full px-4 py-2.5 text-left text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
-                      Export CSV
+                    <button onClick={() => { setShowExportModal(true); setMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                      Export leads
                     </button>
                     {selectedLeads.size > 0 && (
                       <button onClick={() => { setShowDeleteDialog(true); setMenuOpen(false); }} className="w-full px-4 py-2.5 text-left text-sm text-rose-400 hover:text-rose-300 hover:bg-zinc-800 transition-colors border-t border-zinc-800 mt-0.5">
@@ -457,96 +430,37 @@ export default function CRMPage() {
 
       <LeadView lead={selectedLead} isOpen={showLeadModal} onClose={() => { setShowLeadModal(false); setSelectedLead(null); window.history.pushState({}, '', '/crm'); }} />
 
-      {showImportModal && (
+      {showExportModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-modal w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between flex-none">
-              <h3 className="text-base font-semibold text-white">Import leads</h3>
-              <button onClick={() => setShowImportModal(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all duration-150">
-                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-modal w-96 flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white">Export Leads</h3>
+                <p className="text-xs text-zinc-400 mt-1">Exporting {selectedLeads.size > 0 ? `${selectedLeads.size} selected leads` : `${filteredLeads.length} filtered leads`}</p>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="text-zinc-500 hover:text-white hover:bg-zinc-800 p-1 rounded-md transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <input ref={fileInputRef} type="file" accept=".json,.csv" onChange={handleFileSelect} className="hidden" />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full py-10 border-2 border-dashed border-zinc-700 rounded-xl text-sm text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800/20 transition-all duration-150 text-center cursor-pointer"
-              >
-                {importFile ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>{importFile.name}</span>
-                  </div>
-                ) : 'Click to select a JSON or CSV file'}
-              </button>
-
-              {importErrors.length > 0 && (
-                <div className="bg-rose-900/10 border border-rose-800/30 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-rose-400 mb-1.5">Errors</p>
-                  {importErrors.map((e, i) => <p key={i} className="text-sm text-rose-300/80">{e}</p>)}
+            <div className="p-5 space-y-3">
+              <button onClick={handleExportCSV} className="w-full flex items-center gap-3 p-3 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 transition-colors text-left group">
+                <div className="w-10 h-10 rounded bg-emerald-500/10 text-emerald-400 flex items-center justify-center flex-none group-hover:scale-110 transition-transform">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 7.5l8.625 4.5m0 0l8.625-4.5M12 12v9" /><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 7.5L12 3l8.625 4.5M3.375 7.5v9l8.625 4.5m8.625-4.5v-9" /></svg>
                 </div>
-              )}
-
-              {importStats && (
-                <div className="bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-4 grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-white">{importStats.total}</p>
-                    <p className="text-xs text-zinc-500">Total in file</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-amber-400">{importStats.batch_duplicates}</p>
-                    <p className="text-xs text-zinc-500">Duplicates in file</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-rose-400">{importStats.crm_duplicates}</p>
-                    <p className="text-xs text-zinc-500">Already in CRM</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-semibold text-emerald-400">{importStats.unique_to_import}</p>
-                    <p className="text-xs text-zinc-500">Unique to import</p>
-                  </div>
-                </div>
-              )}
-
-              {importPreview.length > 0 && (
                 <div>
-                  <p className="text-sm text-zinc-500 mb-3">Preview</p>
-                  <div className="card overflow-hidden max-h-48">
-                    <table className="min-w-full">
-                      <thead className="bg-zinc-800">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider">Name</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider">Category</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-zinc-500 uppercase tracking-wider">Phone</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800/30">
-                        {importPreview.slice(0, 5).map((l, i) => (
-                          <tr key={i}>
-                            <td className="px-4 py-2.5 text-sm text-white truncate max-w-[180px]">{l.name}</td>
-                            <td className="px-4 py-2.5 text-sm text-zinc-400">{l.category || <span className="text-zinc-600">—</span>}</td>
-                            <td className="px-4 py-2.5 text-sm text-zinc-400 font-mono">{l.company_phone || <span className="text-zinc-600">—</span>}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {importPreview.length > 5 && <p className="text-xs text-zinc-600 text-center py-2.5 border-t border-zinc-800/30">+{importPreview.length - 5} more leads</p>}
-                  </div>
+                  <p className="text-sm font-semibold text-white">Export as CSV</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Spreadsheet format for Excel</p>
                 </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3 flex-none">
-              <button onClick={() => setShowImportModal(false)} className="btn-secondary text-sm">Cancel</button>
-              <button
-                onClick={handleImport}
-                disabled={!importPreview.length || !!importErrors.length || importing}
-                className="btn-primary text-sm"
-              >
-                {importing ? `Importing...` : importStats ? `Import ${importStats.unique_to_import} unique leads` : `Import ${importPreview.length} leads`}
+              </button>
+              
+              <button onClick={handleExportJSON} className="w-full flex items-center gap-3 p-3 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 transition-colors text-left group">
+                <div className="w-10 h-10 rounded bg-amber-500/10 text-amber-400 flex items-center justify-center flex-none group-hover:scale-110 transition-transform">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Export as JSON</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Raw data format with all AI info</p>
+                </div>
               </button>
             </div>
           </div>

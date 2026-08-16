@@ -25,6 +25,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
+        sessionStorage.setItem('reli_session_active', 'true');
         // Redirect to dashboard
         router.push('/');
         router.refresh(); // Refresh server components to pick up new auth state
@@ -50,13 +51,11 @@ export default function LoginPage() {
         <div className="bg-zinc-900/50 backdrop-blur-xl border border-zinc-800/50 p-8 rounded-2xl shadow-2xl">
           
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-zinc-800/80 mb-4 border border-zinc-700/50">
-              <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-              </svg>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-black mb-4 shadow-lg shadow-black/50 p-2 border border-zinc-800">
+              <img src="/logo.png" alt="Han Global" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Welcome Back</h1>
-            <p className="text-sm text-zinc-400 mt-2">Sign in to access your CRM</p>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Han Global</h1>
+            <p className="text-sm text-zinc-400 mt-2">Lead Intelligence</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">

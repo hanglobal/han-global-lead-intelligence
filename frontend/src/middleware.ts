@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
   
   // Allow access to the login page and static assets
   if (
     url.pathname.startsWith('/login') || 
     url.pathname.startsWith('/_next') || 
-    url.pathname === '/favicon.ico'
+    url.pathname === '/favicon.ico' ||
+    url.pathname === '/logo.png'
   ) {
     return NextResponse.next();
   }
@@ -18,13 +19,19 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const authCookie = req.cookies.get('reli_auth_token')?.value;
+  const authCookie = req.cookies.get('reli_session_token')?.value;
 
   if (authCookie) {
     try {
-      const [user, pwd] = atob(authCookie).split(':');
-      if (user === 'admin' && pwd === '321@admin') {
-        // Valid cookie, forward request with Basic Auth header to backend
+      // Forward request with Basic Auth header to backend verify endpoint
+      const verifyRes = await fetch('http://127.0.0.1:5050/api/users/verify-auth/', {
+        headers: {
+          'Authorization': `Basic ${authCookie}`
+        }
+      });
+
+      if (verifyRes.ok) {
+        // Valid cookie, forward request with Basic Auth header to backend API
         const requestHeaders = new Headers(req.headers);
         requestHeaders.set('Authorization', `Basic ${authCookie}`);
         
@@ -35,7 +42,7 @@ export function middleware(req: NextRequest) {
         });
       }
     } catch (e) {
-      // Invalid base64
+      console.error("Middleware Auth Error:", e);
     }
   }
 
@@ -47,6 +54,6 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|logo.png).*)',
   ],
 };

@@ -174,11 +174,10 @@ class LeadImportAgent:
     @staticmethod
     def run_single_from_ai(cr):
         """Creates a Lead record from CampaignResult using AI clean data."""
-        if not cr.is_llm_processed or not cr.ai_clean_data:
-            logger.warning(f"LeadImportAgent: cr {cr.id} not fully processed by AI")
-            cr.is_crm_synced = False
-            cr.save(update_fields=['is_crm_synced'])
+        if cr.is_crm_synced:
             return None
+            
+        ai_data = cr.ai_clean_data or {}
             
         pid = cr.place_id
         if not pid:
@@ -273,7 +272,7 @@ class LeadImportAgent:
                 campaign_ref=cr.campaign,
                 crm_signals={'ai_consolidated_data': ai_data},
                 raw_data=cr.raw_data or {},
-                is_llm_processed=True
+                is_llm_processed=cr.is_llm_processed or False
             )
             
             cr.is_crm_synced = True

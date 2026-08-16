@@ -44,7 +44,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'config.basic_auth_middleware.BasicAuthMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -110,7 +109,11 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
     ],
 }
 
@@ -153,9 +156,9 @@ CACHES = {
 # ---------------------------------------------------------------------------
 APIFY_API_KEY = env('APIFY_API_KEY', default='')
 # Actor IDs — get from https://console.apify.com/actors
-APIFY_ACTOR_GMAP        = env('APIFY_ACTOR_GMAP',        default='nwua9Gu5YrADL7ZDj')
-APIFY_ACTOR_WEB_SCRAPER = env('APIFY_ACTOR_WEB_SCRAPER', default='')
-APIFY_ACTOR_LINKEDIN    = env('APIFY_ACTOR_LINKEDIN',    default='')
+APIFY_ACTOR_GMAP             = env('APIFY_ACTOR_GMAP',             default='nwua9Gu5YrADL7ZDj')
+APIFY_ACTOR_LINKEDIN         = env('APIFY_ACTOR_LINKEDIN',         default='')
+APIFY_ACTOR_LINKEDIN_PROFILE = env('APIFY_ACTOR_LINKEDIN_PROFILE', default='')
 
 # Public URL of the backend — used for Apify webhooks and SSE
 BACKEND_URL = env('BACKEND_URL', default='http://localhost:5050')

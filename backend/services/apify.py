@@ -20,7 +20,6 @@ def _get_sdk_client():
 def _get_actor_id(actor_type):
     mapping = {
         'gmap':        getattr(settings, 'APIFY_ACTOR_GMAP', ''),
-        'web_scraper': getattr(settings, 'APIFY_ACTOR_WEB_SCRAPER', ''),
         'linkedin':    getattr(settings, 'APIFY_ACTOR_LINKEDIN', ''),
     }
     actor_id = mapping.get(actor_type, '')
@@ -70,11 +69,6 @@ def _build_actor_input(actor_type, location, niche, max_leads=None):
         if max_leads and int(max_leads) > 0:
             payload['maxCrawledPlacesPerSearch'] = int(max_leads)
         return payload
-    if actor_type == 'web_scraper':
-        return {
-            'startUrls': [{'url': f'https://www.google.com/search?q={niche}+{location}'}],
-            'maxPagesPerCrawl': min(int(max_leads or 50), 100),
-        }
     if actor_type == 'linkedin':
         return {'searchQuery': f'{niche} {location}', 'maxResults': int(max_leads or 50)}
     raise ValueError(f"Unknown actor_type: '{actor_type}'.")
@@ -132,7 +126,9 @@ class ApifyClient:
         if not urls:
             return []
         client = _get_sdk_client()
-        actor_id = getattr(settings, 'APIFY_ACTOR_LINKEDIN_PROFILE', 'LpVuK3Zozwuipa5bp')
+        actor_id = getattr(settings, 'APIFY_ACTOR_LINKEDIN_PROFILE', '')
+        if not actor_id:
+            raise ValueError('APIFY_ACTOR_LINKEDIN_PROFILE is not configured in .env')
         run_input = {
             "profileScraperMode": "Profile details no email ($4 per 1k)",
             "queries": urls,

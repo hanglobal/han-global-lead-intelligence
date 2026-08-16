@@ -416,6 +416,9 @@ class LeadQualificationSettingsView(APIView):
             'require_phone': settings.require_phone,
             'require_name': settings.require_name,
             'agency_services': settings.agency_services,
+            'scoring_rules': settings.scoring_rules,
+            'insight_generation_rules': settings.insight_generation_rules,
+            'email_generation_rules': settings.email_generation_rules,
         })
 
     def patch(self, request):
@@ -427,6 +430,9 @@ class LeadQualificationSettingsView(APIView):
         if 'require_phone' in data: settings.require_phone = bool(data['require_phone'])
         if 'require_name' in data: settings.require_name = bool(data['require_name'])
         if 'agency_services' in data: settings.agency_services = str(data['agency_services'])
+        if 'scoring_rules' in data: settings.scoring_rules = str(data['scoring_rules'])
+        if 'insight_generation_rules' in data: settings.insight_generation_rules = str(data['insight_generation_rules'])
+        if 'email_generation_rules' in data: settings.email_generation_rules = str(data['email_generation_rules'])
         settings.save()
         return Response({
             'status': 'success',
@@ -436,4 +442,7 @@ class LeadQualificationSettingsView(APIView):
             'require_phone': settings.require_phone,
             'require_name': settings.require_name,
             'agency_services': settings.agency_services,
+            'scoring_rules': settings.scoring_rules,
+            'insight_generation_rules': settings.insight_generation_rules,
+            'email_generation_rules': settings.email_generation_rules,
         })

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 interface Campaign {
@@ -69,6 +69,11 @@ export default function CampaignDetails({ campaign: init, isOpen, onClose, embed
 
   useEffect(() => { setCampaign(init); }, [init]);
 
+  // Keep a ref to current campaign so SSE handlers always read the latest value
+  // without needing to be re-registered on every state change (stale closure fix)
+  const campaignRef = useRef(campaign);
+  useEffect(() => { campaignRef.current = campaign; }, [campaign]);
+
   useEffect(() => {
     if ((embedded || isOpen) && campaign) {
       fetchResults(campaign.id);
@@ -85,25 +90,26 @@ export default function CampaignDetails({ campaign: init, isOpen, onClose, embed
   useEffect(() => {
     const handleCampaignCompleted = (e: any) => {
       const completedCampaign = e.detail;
-      if (campaign && completedCampaign && (completedCampaign.id === campaign.id || completedCampaign.campaign_id === campaign.campaign_id)) {
-        console.log("SSE Campaign Completed received in Details View:", completedCampaign);
+      const cur = campaignRef.current;
+      if (cur && completedCampaign && (completedCampaign.id === cur.id || completedCampaign.campaign_id === cur.campaign_id)) {
         setCampaign(prev => prev ? { 
           ...prev, 
           status: completedCampaign.status, 
           stage: completedCampaign.stage,
-          crawled_count: completedCampaign.crawled_count !== undefined ? completedCampaign.crawled_count : prev.crawled_count,
-          llm_processed_count: completedCampaign.llm_processed_count !== undefined ? completedCampaign.llm_processed_count : prev.llm_processed_count,
-          apollo_processed_count: completedCampaign.apollo_processed_count !== undefined ? completedCampaign.apollo_processed_count : prev.apollo_processed_count,
-          linkedin_processed_count: completedCampaign.linkedin_processed_count !== undefined ? completedCampaign.linkedin_processed_count : prev.linkedin_processed_count,
-          insights_processed_count: completedCampaign.insights_processed_count !== undefined ? completedCampaign.insights_processed_count : prev.insights_processed_count,
+          crawled_count: completedCampaign.crawled_count ?? prev.crawled_count,
+          llm_processed_count: completedCampaign.llm_processed_count ?? prev.llm_processed_count,
+          apollo_processed_count: completedCampaign.apollo_processed_count ?? prev.apollo_processed_count,
+          linkedin_processed_count: completedCampaign.linkedin_processed_count ?? prev.linkedin_processed_count,
+          insights_processed_count: completedCampaign.insights_processed_count ?? prev.insights_processed_count,
         } : prev);
-        fetchResults(campaign.id);
+        fetchResults(cur.id);
         onCampaignUpdated?.();
       }
     };
     const handleCampaignProgress = (e: any) => {
       const p = e.detail;
-      if (campaign && p && (p.id === campaign.id || p.campaign_id === campaign.campaign_id)) {
+      const cur = campaignRef.current;
+      if (cur && p && (p.id === cur.id || p.campaign_id === cur.campaign_id)) {
         setCampaign(prev => prev ? { 
           ...prev, 
           status: p.status, 
@@ -121,7 +127,8 @@ export default function CampaignDetails({ campaign: init, isOpen, onClose, embed
     };
     const handleCampaignLog = (e: any) => {
       const p = e.detail;
-      if (campaign && p && (p.id === campaign.id || p.campaign_id === campaign.campaign_id) && p.log) {
+      const cur = campaignRef.current;
+      if (cur && p && (p.id === cur.id || p.campaign_id === cur.campaign_id) && p.log) {
         setLogs(prev => [...prev, p.log]);
       }
     };
@@ -134,7 +141,8 @@ export default function CampaignDetails({ campaign: init, isOpen, onClose, embed
       window.removeEventListener('campaign-progress', handleCampaignProgress);
       window.removeEventListener('campaign-log', handleCampaignLog);
     };
-  }, [campaign?.id, campaign?.campaign_id]);
+  // Register only once on mount - campaignRef always has fresh value via the ref sync above
+  }, []);
 
   useEffect(() => {
     if (viewMode === 'logs' && logsEndRef.current) {

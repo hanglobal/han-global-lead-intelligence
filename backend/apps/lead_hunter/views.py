@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
@@ -276,6 +277,7 @@ class CheckCampaignStatusView(APIView):
 
 class ApifyWebhookView(APIView):
     """Webhook for Apify to call when run is complete."""
+    permission_classes = [AllowAny]
     
     def post(self, request):
         """Handle webhook from Apify."""

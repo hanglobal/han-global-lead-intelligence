@@ -17,8 +17,6 @@ interface FilterTabProps {
   hasPhone: boolean;
   scoreMin: number | '';
   scoreMax: number | '';
-  sources: string[];
-  sourceFilter: Set<string>;
   hasActiveFilters: boolean;
   onToggleStatus: (status: string) => void;
   onToggleCategory: (category: string) => void;
@@ -32,7 +30,6 @@ interface FilterTabProps {
   onHasPhoneChange: (val: boolean) => void;
   onScoreMinChange: (val: number | '') => void;
   onScoreMaxChange: (val: number | '') => void;
-  onToggleSource: (source: string) => void;
   onClearAll: () => void;
 }
 
@@ -88,10 +85,10 @@ function Section({
 export default function FilterTab({
   isOpen, categories, statusFilter, categoryFilter, campaignFilter, leadIdFilter,
   ratingMin, ratingMax, reviewMin, reviewMax,
-  hasEmail, hasPhone, scoreMin, scoreMax, sources, sourceFilter,
+  hasEmail, hasPhone, scoreMin, scoreMax,
   hasActiveFilters, onToggleStatus, onToggleCategory, onToggleCampaign, onToggleLeadId,
   onRatingMinChange, onRatingMaxChange, onReviewMinChange, onReviewMaxChange,
-  onHasEmailChange, onHasPhoneChange, onScoreMinChange, onScoreMaxChange, onToggleSource,
+  onHasEmailChange, onHasPhoneChange, onScoreMinChange, onScoreMaxChange,
   onClearAll,
 }: FilterTabProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -263,19 +260,6 @@ export default function FilterTab({
                 <label key={cat} className="flex items-center gap-2.5 cursor-pointer group">
                   <input type="checkbox" checked={categoryFilter.has(cat)} onChange={() => onToggleCategory(cat)} className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 accent-primary-500" />
                   <span className="text-sm text-zinc-400 group-hover:text-zinc-200 transition-colors truncate">{cat}</span>
-                </label>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {sources.length > 0 && (
-          <Section label="Source" open={expanded.has('source')} onToggle={() => toggle('source')}>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {sources.map((src) => (
-                <label key={src} className="flex items-center gap-2.5 cursor-pointer group">
-                  <input type="checkbox" checked={sourceFilter.has(src)} onChange={() => onToggleSource(src)} className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 accent-primary-500" />
-                  <span className="text-sm text-zinc-400 group-hover:text-zinc-200 transition-colors truncate">{src || 'Unknown'}</span>
                 </label>
               ))}
             </div>

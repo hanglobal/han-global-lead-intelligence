@@ -99,22 +99,6 @@ class Lead(models.Model):
     def __str__(self):
         return f"{self.lid} — {self.name or 'Unnamed'}"
 
-    def calculate_score(self):
-        score = 0
-        if self.company_email:     score += 20
-        if self.company_phone:             score += 15
-        if self.website:           score += 15
-        if self.rating:
-            score += min(int(self.rating * 2), 15)
-        if self.review_count and self.review_count > 10:
-            score += 10
-        if self.facebook_url or self.instagram_url or self.linkedin_url:
-            score += 10
-        if self.address:           score += 5
-        if self.category:          score += 5
-        if self.google_maps_url:   score += 5
-        return min(score, 100)
-
     @staticmethod
     def calculate_score_label(score):
         if score is None:  return None
@@ -179,6 +163,21 @@ class LeadQualificationSettings(models.Model):
         blank=True, 
         default='', 
         help_text="Describe your agency's services. Used by AI to evaluate if a lead is a good fit."
+    )
+    scoring_rules = models.TextField(
+        blank=True,
+        default="Score the lead out of 100 based on the following rules:\n- If the lead has a company email, add 20 points.\n- If the lead has a company phone, add 15 points.\n- If the lead has a website, add 15 points.\n- If the lead has a rating, add (rating * 2) points, up to a maximum of 15 points.\n- If the lead has more than 10 reviews, add 10 points.\n- If the lead has a Facebook, Instagram, or LinkedIn URL, add 10 points.\n- If the lead has an address, add 5 points.\n- If the lead has a category, add 5 points.\n- If the lead has a Google Maps URL, add 5 points.",
+        help_text="Dynamic AI lead scoring rules."
+    )
+    insight_generation_rules = models.TextField(
+        blank=True,
+        default="Analyze the lead data and generate three strategic insights. Your response should be detailed, providing 10 to 15 lines of rich analysis for the lead:\n1. Pain Points: What are the likely operational or business challenges this specific lead faces?\n2. Operational Gap: What are they missing that our solution provides?\n3. Opportunity: How can we position our product to close this deal?",
+        help_text="Dynamic AI rules for generating insights."
+    )
+    email_generation_rules = models.TextField(
+        blank=True,
+        default="Write a highly personalized, cold outreach email for the prospect below.\nUse the provided AI-generated insights to make the email relevant to their specific business.\nThe email should be concise (under 150 words), conversational, and end with a low-friction call to action.",
+        help_text="Dynamic AI rules for generating email drafts."
     )
 
     class Meta:

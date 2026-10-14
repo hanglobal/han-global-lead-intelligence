@@ -13,36 +13,47 @@ class Lead(models.Model):
     # ── Identity ─────────────────────────────────────────────────────────────
     lid             = models.CharField(max_length=20, unique=True, blank=True, null=True, editable=False)
     place_id        = models.CharField(max_length=255, unique=True, blank=True, db_index=True)
-    fid             = models.CharField(max_length=255, blank=True)
+    fid             = models.CharField(max_length=255, blank=True, default='')
     source          = models.CharField(max_length=50, blank=True, null=True)
 
-    # ── Company Info ──────────────────────────────────────────────────────────
-    name            = models.CharField(max_length=255, blank=True)
-    category        = models.CharField(max_length=255, blank=True, null=True)
+    # ── Company Info (Exact Nexus Fields) ────────────────────────────────────
+    company_name                 = models.CharField(max_length=255, blank=True)
+    company_website              = models.TextField(blank=True, null=True)
+    company_domain               = models.CharField(max_length=255, blank=True, null=True)
+    company_phone                = models.CharField(max_length=255, blank=True, null=True)
+    company_linkedin             = models.TextField(blank=True, null=True)
+    industry                     = models.CharField(max_length=255, blank=True, null=True)
+    company_size                 = models.CharField(max_length=100, blank=True, null=True)
+    company_annual_revenue       = models.CharField(max_length=100, blank=True, null=True)
+    company_annual_revenue_clean = models.CharField(max_length=100, blank=True, null=True)
+    company_total_funding        = models.CharField(max_length=100, blank=True, null=True)
+    company_total_funding_clean  = models.CharField(max_length=100, blank=True, null=True)
+    company_technologies         = models.JSONField(default=list, blank=True)
+    keywords                     = models.TextField(blank=True, null=True)
+    company_description          = models.TextField(blank=True, null=True)
+    city                         = models.CharField(max_length=255, blank=True, null=True)
+    state                        = models.CharField(max_length=100, blank=True, null=True)
+    country                      = models.CharField(max_length=100, blank=True, null=True)
+
+    # ── Additional Address / Contact Info ─────────────────────────────────────
+    company_full_address         = models.TextField(blank=True)
+    company_street_address       = models.CharField(max_length=255, blank=True, null=True)
+    neighborhood                 = models.CharField(max_length=255, blank=True, null=True)
+    company_postal_code          = models.CharField(max_length=20, blank=True, null=True)
+    latitude                     = models.FloatField(blank=True, null=True)
+    longitude                    = models.FloatField(blank=True, null=True)
+    company_email                = models.CharField(max_length=500, blank=True, null=True)
+    google_maps_url              = models.TextField(blank=True, null=True)
+
+    # ── Legacy / Rating ───────────────────────────────────────────────────────
     rating          = models.FloatField(blank=True, null=True)
     review_count    = models.IntegerField(blank=True, null=True)
     price_level     = models.CharField(max_length=10, blank=True, null=True)
-
-    # ── Location ──────────────────────────────────────────────────────────────
-    address         = models.TextField(blank=True)
-    street_address  = models.CharField(max_length=255, blank=True, null=True)
-    neighborhood    = models.CharField(max_length=255, blank=True, null=True)
-    city            = models.CharField(max_length=255, blank=True, null=True)
-    postal_code     = models.CharField(max_length=20, blank=True, null=True)
-    latitude        = models.FloatField(blank=True, null=True)
-    longitude       = models.FloatField(blank=True, null=True)
-
-    # ── Contact ───────────────────────────────────────────────────────────────
-    company_phone   = models.CharField(max_length=255, blank=True, null=True)
-    company_email   = models.CharField(max_length=500, blank=True, null=True)
-    website         = models.TextField(blank=True, null=True)
-    google_maps_url = models.TextField(blank=True, null=True)
 
     # ── Social ────────────────────────────────────────────────────────────────
     facebook_url    = models.TextField(blank=True, null=True)
     twitter_url     = models.TextField(blank=True, null=True)
     instagram_url   = models.TextField(blank=True, null=True)
-    linkedin_url    = models.TextField(blank=True, null=True)
     youtube_url     = models.TextField(blank=True, null=True)
     tiktok_url      = models.TextField(blank=True, null=True)
     pinterest_url   = models.TextField(blank=True, null=True)
@@ -50,7 +61,15 @@ class Lead(models.Model):
 
     # ── CRM Pipeline ─────────────────────────────────────────────────────────
     STATUS_CHOICES = [
-        ('new', 'New'), ('qualified', 'Qualified'), ('unqualified', 'Unqualified'),
+        ('new', 'New'),
+        ('qualified', 'Qualified'),
+        ('contacted', 'Contacted'),
+        ('follow_up_scheduled', 'Follow-up Scheduled'),
+        ('in_discussion', 'In Discussion'),
+        ('meeting_booked', 'Meeting Booked'),
+        ('closed_won', 'Closed Won'),
+        ('closed_lost', 'Closed Lost'),
+        ('unqualified', 'Unqualified'),
     ]
     status          = models.CharField(max_length=50, choices=STATUS_CHOICES, default='new')
     stage           = models.CharField(max_length=100, blank=True, null=True, help_text="Stage where the lead failed or completed")
@@ -59,9 +78,46 @@ class Lead(models.Model):
     classification  = models.CharField(max_length=100, blank=True, null=True)
     notes           = models.TextField(blank=True, null=True)
     tags            = models.JSONField(default=list, blank=True)
-    crm_signals     = models.JSONField(default=dict, blank=True)
     working_hours   = models.TextField(blank=True, null=True)
     ai_reasoning    = models.TextField(blank=True, null=True, help_text="Reasoning for AI qualification/rejection")
+
+    # ── Sales & Follow-up Workflow ──────────────────────────────────────────
+    follow_up_date        = models.DateField(null=True, blank=True, db_index=True)
+    follow_up_time        = models.CharField(max_length=50, blank=True, null=True)
+    follow_up_status      = models.CharField(
+        max_length=50, 
+        default='none', 
+        db_index=True,
+        choices=[
+            ('none', 'None'),
+            ('scheduled', 'Scheduled'),
+            ('overdue', 'Overdue'),
+            ('completed', 'Completed'),
+            ('cancelled', 'Cancelled'),
+        ]
+    )
+    follow_up_priority    = models.CharField(
+        max_length=20, 
+        default='medium',
+        choices=[
+            ('high', 'High'),
+            ('medium', 'Medium'),
+            ('low', 'Low'),
+        ]
+    )
+    follow_up_action_type = models.CharField(
+        max_length=50, 
+        default='call',
+        choices=[
+            ('call', 'Call'),
+            ('email', 'Email'),
+            ('linkedin', 'LinkedIn Message'),
+            ('meeting', 'Meeting / Demo'),
+            ('other', 'Other'),
+        ]
+    )
+    follow_up_notes       = models.TextField(blank=True, null=True)
+    last_contacted_at     = models.DateTimeField(null=True, blank=True, db_index=True)
 
     # ── Campaign Link ─────────────────────────────────────────────────────────
     campaign_id        = models.CharField(max_length=100, blank=True, null=True, db_index=True)
@@ -75,11 +131,78 @@ class Lead(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
-        if is_new and not self.lid:
-            # strictly sequential based on current count
-            count = Lead.objects.count()
-            self.lid = f"LID-{count + 1}"
+        if not self.place_id:
+            import uuid
+            self.place_id = f"manual_{uuid.uuid4().hex[:16]}"
+        if self.fid is None:
+            self.fid = ''
+        if not self.company_name:
+            self.company_name = 'Unnamed Lead'
+        if self.company_full_address is None:
+            self.company_full_address = ''
         super().save(*args, **kwargs)
+        # Generate LID after save so we can use the DB-assigned pk (guaranteed unique).
+        # Using COUNT() was not atomic under concurrent Celery workers.
+        if is_new and not self.lid:
+            self.lid = f"LID-{self.pk}"
+            Lead.objects.filter(pk=self.pk).update(lid=self.lid)
+
+    # ── Backwards-Compatible Aliases with Setters ─────────────────────────────
+    @property
+    def name(self):
+        return self.company_name
+
+    @name.setter
+    def name(self, value):
+        self.company_name = value or ''
+
+    @property
+    def website(self):
+        return self.company_website
+
+    @website.setter
+    def website(self, value):
+        self.company_website = value or ''
+
+    @property
+    def category(self):
+        return self.industry
+
+    @category.setter
+    def category(self, value):
+        self.industry = value or ''
+
+    @property
+    def address(self):
+        return self.company_full_address
+
+    @address.setter
+    def address(self, value):
+        self.company_full_address = value or ''
+
+    @property
+    def street_address(self):
+        return self.company_street_address
+
+    @street_address.setter
+    def street_address(self, value):
+        self.company_street_address = value or ''
+
+    @property
+    def postal_code(self):
+        return self.company_postal_code
+
+    @postal_code.setter
+    def postal_code(self, value):
+        self.company_postal_code = value or ''
+
+    @property
+    def linkedin_url(self):
+        return self.company_linkedin
+
+    @linkedin_url.setter
+    def linkedin_url(self, value):
+        self.company_linkedin = value or ''
 
     # ── Raw / Meta ────────────────────────────────────────────────────────────
     crm_signals = models.JSONField(default=dict, blank=True, null=True)
@@ -97,7 +220,7 @@ class Lead(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.lid} — {self.name or 'Unnamed'}"
+        return f"{self.lid} — {self.company_name or 'Unnamed'}"
 
     @staticmethod
     def calculate_score_label(score):
@@ -111,6 +234,7 @@ class LeadActivity(models.Model):
     lead          = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='activities')
     activity_type = models.CharField(max_length=100, blank=True)
     description   = models.TextField(blank=True)
+    performed_by  = models.CharField(max_length=100, default='User', blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -121,16 +245,57 @@ class LeadActivity(models.Model):
         return f"{self.activity_type} on {self.lead.lid}"
 
 
+class LeadNote(models.Model):
+    lead       = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='lead_notes')
+    note       = models.TextField()
+    created_by = models.CharField(max_length=100, default='User', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'crm_lead_notes'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Note on {self.lead.lid} at {self.created_at}"
+
+
 class CompanyPerson(models.Model):
-    # ── Person Info ───────────────────────────────────────────────────────────
+    # ── Decision Maker Info (Exact Nexus Fields) ──────────────────────────────
     lead                = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name='company_people')
-    companyperson_name  = models.CharField(max_length=255)
-    role                = models.CharField(max_length=100, blank=True, default='')
+    full_name           = models.CharField(max_length=255)
+    first_name          = models.CharField(max_length=100, blank=True, null=True)
+    last_name           = models.CharField(max_length=100, blank=True, null=True)
+    job_title           = models.CharField(max_length=255, blank=True, default='')
+    headline            = models.TextField(blank=True, null=True)
+    seniority_level     = models.CharField(max_length=100, blank=True, null=True)
+    functional_level    = models.CharField(max_length=100, blank=True, null=True)
     email               = models.EmailField(blank=True, null=True)
-    phone               = models.CharField(max_length=50, blank=True, null=True)
-    website             = models.URLField(max_length=500, blank=True, null=True)
-    linkedin_url        = models.URLField(max_length=500, blank=True, null=True)
-    is_primary          = models.BooleanField(default=False)
+    personal_email      = models.EmailField(blank=True, null=True)
+    mobile_number       = models.CharField(max_length=50, blank=True, null=True)
+    linkedin            = models.URLField(max_length=500, blank=True, null=True)
+    city                = models.CharField(max_length=100, blank=True, null=True)
+    state               = models.CharField(max_length=100, blank=True, null=True)
+    country             = models.CharField(max_length=100, blank=True, null=True)
+
+    # ── Enriched Profile Data (Nexus LINKEDIN Campaign) ───────────────────────
+    profile_image_url   = models.URLField(max_length=1000, blank=True, null=True)
+    skills              = models.JSONField(default=list, blank=True)
+    experience_history  = models.JSONField(default=list, blank=True)
+    education_history   = models.JSONField(default=list, blank=True)
+    about               = models.TextField(blank=True, null=True)
+
+    # ── Backwards-Compatible Aliases ──────────────────────────────────────────
+    @property
+    def companyperson_name(self):
+        return self.full_name
+
+    @property
+    def role(self):
+        return self.job_title
+
+    @property
+    def linkedin_url(self):
+        return self.linkedin
 
     # ── Meta ──────────────────────────────────────────────────────────────────
     created_at  = models.DateTimeField(auto_now_add=True)
@@ -138,27 +303,26 @@ class CompanyPerson(models.Model):
 
     class Meta:
         db_table = 'crm_company_people'
-        ordering = ['lead_id', '-is_primary', 'companyperson_name']
+        ordering = ['lead_id', 'full_name']
         constraints = [
             models.UniqueConstraint(
-                fields=('lead', 'companyperson_name', 'role'),
+                fields=('lead', 'full_name', 'job_title'),
                 name='uniq_person_per_lead_role',
             )
         ]
-        indexes = [
-            models.Index(fields=['lead', 'is_primary'], name='crm_company_lead_id_1c6d12_idx'),
-        ]
 
     def __str__(self):
-        return f"{self.companyperson_name} ({self.role}) @ {self.lead.lid}"
+        return f"{self.full_name} ({self.job_title}) @ {self.lead.lid}"
 
 
 class LeadQualificationSettings(models.Model):
-    min_reviews = models.IntegerField(default=10)
-    min_rating = models.FloatField(default=4.0)
+    min_reviews = models.IntegerField(default=0)
+    min_rating = models.FloatField(default=0.0)
     require_website = models.BooleanField(default=True)
-    require_phone = models.BooleanField(default=True)
     require_name = models.BooleanField(default=True)
+    require_direct_contact = models.BooleanField(default=True, help_text="Require direct email, personal email, or mobile number")
+    require_linkedin = models.BooleanField(default=False, help_text="Require personal LinkedIn URL")
+    require_phone = models.BooleanField(default=False)
     agency_services = models.TextField(
         blank=True, 
         default='', 
@@ -166,7 +330,7 @@ class LeadQualificationSettings(models.Model):
     )
     scoring_rules = models.TextField(
         blank=True,
-        default="Score the lead out of 100 based on the following rules:\n- If the lead has a company email, add 20 points.\n- If the lead has a company phone, add 15 points.\n- If the lead has a website, add 15 points.\n- If the lead has a rating, add (rating * 2) points, up to a maximum of 15 points.\n- If the lead has more than 10 reviews, add 10 points.\n- If the lead has a Facebook, Instagram, or LinkedIn URL, add 10 points.\n- If the lead has an address, add 5 points.\n- If the lead has a category, add 5 points.\n- If the lead has a Google Maps URL, add 5 points.",
+        default="Score the lead out of 100 based on the following rules:\n- If the lead has a direct email or personal email, add 25 points.\n- If the lead has a mobile phone or direct number, add 20 points.\n- If the lead has a website, add 15 points.\n- If the lead has a LinkedIn profile URL, add 15 points.\n- If the lead has company size, tech stack, or revenue data, add 10 points.\n- If the lead has an address or location, add 10 points.\n- If the lead has a category or industry, add 5 points.",
         help_text="Dynamic AI lead scoring rules."
     )
     insight_generation_rules = models.TextField(

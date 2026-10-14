@@ -43,3 +43,33 @@ class LeadInsight(models.Model):
 
     def __str__(self):
         return f"Insight for Lead: {self.lead_id}"
+
+
+class LinkedInProfileCache(models.Model):
+    normalized_url      = models.CharField(max_length=500, unique=True, db_index=True)
+    original_url        = models.TextField(blank=True)
+    person_name         = models.CharField(max_length=255, blank=True, default='')
+    profile_data        = models.JSONField(default=dict, blank=True)
+    posts_data          = models.JSONField(default=list, blank=True)
+    status              = models.CharField(
+        max_length=50, 
+        default='completed',
+        choices=[
+            ('completed', 'Completed'),
+            ('in_progress', 'In Progress'),
+            ('failed', 'Failed'),
+        ]
+    )
+    profile_campaign_id = models.CharField(max_length=100, blank=True, null=True)
+    post_campaign_id    = models.CharField(max_length=100, blank=True, null=True)
+    hit_count           = models.IntegerField(default=1, help_text="Number of times this cached data was reused")
+    created_at          = models.DateTimeField(auto_now_add=True)
+    updated_at          = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'enrichment_linkedin_cache'
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"LinkedInCache: {self.normalized_url} ({self.status}) - reused {self.hit_count}x"
+

@@ -47,5 +47,5 @@ def resume_campaign_pipeline(campaign):
         # We can just call check_campaign_completion to see if it's completely done.
         check_campaign_completion(campaign.id)
 
-    from apps.lead_hunter.views import publish_campaign_progress
+    from services.events import publish_campaign_progress
     publish_campaign_progress(campaign)

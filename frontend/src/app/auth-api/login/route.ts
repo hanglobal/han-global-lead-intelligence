@@ -1,28 +1,39 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getBackendApiUrl } from '@/lib/config';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { username, password } = body;
 
-    const token = btoa(`${username}:${password}`);
-    
-    // Verify credentials with Django backend
-    const verifyRes = await fetch('http://127.0.0.1:5050/api/users/verify-auth/', {
+    const res = await fetch(`${getBackendApiUrl()}/token/`, {
+      method: 'POST',
       headers: {
-        'Authorization': `Basic ${token}`
-      }
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password })
     });
 
-    if (verifyRes.ok) {
-      // Set the cookie as a session cookie (no maxAge)
-      cookies().set('reli_session_token', token, {
+    if (res.ok) {
+      const data = await res.json();
+      // Set the access token cookie as session cookie
+      cookies().set('reli_session_token', data.access, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
         path: '/',
       });
+      // Set 7-day refresh token cookie for silent background renewal
+      if (data.refresh) {
+        cookies().set('reli_refresh_token', data.refresh, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          path: '/',
+          maxAge: 7 * 24 * 60 * 60, // 7 days
+        });
+      }
       
       return NextResponse.json({ success: true });
     }

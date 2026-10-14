@@ -5,13 +5,22 @@
  * This route manually proxies the SSE stream from the Django backend,
  * forwarding auth headers and keeping the connection alive without buffering.
  */
+import { getBackendApiUrl } from '@/lib/config';
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get('Authorization') || '';
+  let authHeader = request.headers.get('Authorization') || '';
+  if (!authHeader) {
+    const cookieHeader = request.headers.get('cookie') || '';
+    const match = cookieHeader.match(/reli_session_token=([^;]+)/);
+    if (match && match[1]) {
+      authHeader = `Bearer ${decodeURIComponent(match[1])}`;
+    }
+  }
 
-  const backendUrl = 'http://127.0.0.1:5050/api/lead-hunter/stream/';
+  const backendUrl = `${getBackendApiUrl()}/lead-hunter/stream/`;
 
   const backendResponse = await fetch(backendUrl, {
     headers: {
@@ -34,7 +43,6 @@ export async function GET(request: Request) {
       'Cache-Control': 'no-cache, must-revalidate',
       'X-Accel-Buffering': 'no',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     },
   });
 }

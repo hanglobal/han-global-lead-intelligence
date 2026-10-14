@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getBackendApiUrl } from '@/lib/config';
 
 export async function POST(request: Request) {
   try {
@@ -12,11 +13,11 @@ export async function POST(request: Request) {
     }
 
     // Call Django backend
-    const res = await fetch('http://127.0.0.1:5050/api/users/update-security/', {
+    const res = await fetch(`${getBackendApiUrl()}/users/update-security/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${authCookie}`
+        'Authorization': `Bearer ${authCookie}`
       },
       body: JSON.stringify({ current_password, new_password, new_username })
     });
@@ -24,17 +25,9 @@ export async function POST(request: Request) {
     const data = await res.json();
 
     if (res.ok) {
-      // If the username or password was changed, we must update the Next.js cookie!
-      // We parse the old cookie to get the current username if not changed, etc.
-      const [oldUser, oldPass] = atob(authCookie).split(':');
-      
-      // If superuser is doing the override, their cookie does NOT change!
-      // We only update the cookie if the person logged in is NOT superuser, or if the logic requires it.
-      // Wait, if superuser is logged in, their username/password didn't change (only the regular user's did).
-      // If regular user is logged in, their username/password changed.
-      // How do we know who is logged in? The backend can return whether the cookie needs update.
-      if (data.token_update_required && data.new_token) {
-        cookies().set('reli_session_token', data.new_token, {
+      // If credentials changed, update the cookie with the newly issued JWT token
+      if (data.token_update_required && data.access) {
+        cookies().set('reli_session_token', data.access, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'strict',

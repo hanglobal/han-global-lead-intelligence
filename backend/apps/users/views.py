@@ -27,42 +27,49 @@ def verify_auth(request):
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def profile_view(request):
-    # Always operate on the normal user, even if superuser is logged in.
-    # We find the regular user (non-superuser). Since there's only 1 regular user, we pick the first one.
-    target_user = User.objects.filter(is_superuser=False).first()
-    if not target_user:
-        return Response({'error': 'Normal user not found'}, status=404)
-        
-    profile, _ = UserProfile.objects.get_or_create(user=target_user)
+    """
+    Profile management for the solo administrator.
+    """
+    admin_user = request.user
+    profile, _ = UserProfile.objects.get_or_create(user=admin_user)
 
     if request.method == 'GET':
         return Response({
-            'username': target_user.username,
-            'first_name': target_user.first_name,
-            'email': target_user.email,
-            'phone_number': profile.phone_number,
-            'profile_dp': profile.profile_dp,
-            'logged_in_as_superuser': request.user.is_superuser
+            'username': admin_user.username,
+            'first_name': admin_user.first_name,
+            'email': admin_user.email,
+            'phone_number': profile.phone_number or '',
+            'profile_dp': profile.profile_dp or '',
+            'is_admin': True,
         })
 
     elif request.method == 'PUT':
         data = request.data
-        target_user.first_name = data.get('first_name', target_user.first_name)
-        target_user.email = data.get('email', target_user.email)
-        target_user.save()
+        admin_user.first_name = data.get('first_name', admin_user.first_name)
+        admin_user.email = data.get('email', admin_user.email)
+        admin_user.save()
         
         if 'phone_number' in data:
             profile.phone_number = data['phone_number']
         if 'profile_dp' in data:
-            profile.profile_dp = data['profile_dp']
+            profile_dp = data['profile_dp']
+            if profile_dp:
+                if len(profile_dp) > 3_000_000:
+                    return Response({'error': 'Profile picture too large (max 2MB)'}, status=400)
+                if not (profile_dp.startswith('data:image/') or profile_dp.startswith('http://') or profile_dp.startswith('https://')):
+                    return Response({'error': 'Invalid image format'}, status=400)
+            profile.profile_dp = profile_dp
             
         profile.save()
-        return Response({'success': True, 'message': 'Profile updated successfully'})
+        return Response({'success': True, 'message': 'Admin profile updated successfully'})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_security(request):
+    """
+    Update credentials for the solo administrator.
+    """
     data = request.data
     current_password = data.get('current_password')
     new_password = data.get('new_password')
@@ -71,43 +78,32 @@ def update_security(request):
     if not current_password:
         return Response({'error': 'Please provide current_password'}, status=400)
     
-    # Authenticate the provided current password against the LOGGED IN user
+    # Authenticate the provided current password against the logged in admin user
     user = authenticate(username=request.user.username, password=current_password)
     
     if user is None:
         return Response({'error': 'Incorrect current password'}, status=400)
         
-    # The password was verified. Now we change the NORMAL user's details.
-    target_user = User.objects.filter(is_superuser=False).first()
-    if not target_user:
-        return Response({'error': 'Normal user not found'}, status=404)
+    admin_user = request.user
         
     if new_password:
-        target_user.set_password(new_password)
+        admin_user.set_password(new_password)
         
     if new_username:
-        if User.objects.filter(username=new_username).exclude(pk=target_user.pk).exists():
+        if User.objects.filter(username=new_username).exclude(pk=admin_user.pk).exists():
             return Response({'error': 'Username already taken'}, status=400)
-        target_user.username = new_username
+        admin_user.username = new_username
         
-    target_user.save()
+    admin_user.save()
     
-    # If the user who is logged in is the target_user, we need to tell the frontend to update the cookie
-    # with the new credentials so they don't get logged out!
-    token_update_required = False
-    new_token = None
-    if not request.user.is_superuser:
-        token_update_required = True
-        # If new_password is not provided, use current_password for the token
-        final_password = new_password if new_password else current_password
-        final_username = new_username if new_username else target_user.username
-        
-        credentials = f"{final_username}:{final_password}"
-        new_token = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+    from rest_framework_simplejwt.tokens import RefreshToken
+    refresh = RefreshToken.for_user(admin_user)
     
     return Response({
         'success': True, 
-        'message': 'Security settings updated successfully',
-        'token_update_required': token_update_required,
-        'new_token': new_token
+        'message': 'Admin security settings updated successfully',
+        'token_update_required': bool(new_password or new_username),
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'new_username': new_username if new_username else admin_user.username,
     })

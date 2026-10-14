@@ -21,41 +21,64 @@ class LeadQualificationAgent:
         
         for cr in campaign_results:
             passed = True
+            raw = cr.raw_data or {}
+            reasons = []
             
-            # 1. Review Count Check
-            review_count = cr.review_count or cr.raw_data.get('reviewsCount') or 0
-            if int(review_count) < settings.min_reviews:
-                passed = False
+            # 1. Website Check
+            if settings.require_website:
+                has_website = bool(
+                    cr.website or 
+                    raw.get('company_website') or 
+                    raw.get('company_domain') or 
+                    raw.get('website')
+                )
+                if not has_website:
+                    reasons.append("Missing website")
                 
-            # 2. Rating Check
-            rating = cr.rating or cr.raw_data.get('totalScore') or 0.0
-            if float(rating) < settings.min_rating:
-                passed = False
+            # 2. Decision Maker Name Check
+            if settings.require_name:
+                dm_name = (
+                    raw.get('full_name') or 
+                    f"{raw.get('first_name', '')} {raw.get('last_name', '')}".strip() or 
+                    cr.name or 
+                    raw.get('title')
+                )
+                if not dm_name:
+                    reasons.append("Missing decision maker name")
                 
-            # 3. Website Check
-            if settings.require_website and not (cr.website or cr.raw_data.get('website')):
-                passed = False
+            # 3. Direct Contact Info Check (At least 1: email, personal_email, or mobile_number)
+            # Note: Company general phone is NOT counted as direct contact info
+            if settings.require_direct_contact:
+                direct_email = raw.get('email')
+                personal_email = raw.get('personal_email')
+                mobile_number = raw.get('mobile_number')
                 
-            # 4. Phone Check
-            if settings.require_phone and not (cr.company_phone or cr.raw_data.get('phone')):
-                passed = False
+                has_direct_contact = bool(direct_email or personal_email or mobile_number)
+                if not has_direct_contact:
+                    reasons.append("Missing direct contact info (email/mobile)")
+
+            # 4. Optional LinkedIn URL Check
+            if settings.require_linkedin:
+                has_linkedin = bool(raw.get('linkedin') or raw.get('company_linkedin') or (cr.raw_data or {}).get('linkedin'))
+                if not has_linkedin:
+                    reasons.append("Missing LinkedIn URL")
                 
-            # 5. Name Check
-            if settings.require_name and not (cr.name or cr.raw_data.get('title')):
-                passed = False
-                
-            if passed:
+            if len(reasons) == 0:
                 cr.qualification_status = 'qualified'
                 cr.is_basic_qualified = True
                 qualified_count += 1
             else:
                 cr.qualification_status = 'unqualified'
                 cr.is_basic_qualified = False
+                ai_data = cr.ai_clean_data or {}
+                ai_data['is_ideal_customer'] = False
+                ai_data['qualification_reasoning'] = f"Basic criteria failed: {', '.join(reasons)}"
+                cr.ai_clean_data = ai_data
                 unqualified_count += 1
                 
-            cr.save(update_fields=['qualification_status', 'is_basic_qualified'])
+            cr.save(update_fields=['qualification_status', 'is_basic_qualified', 'ai_clean_data'])
             
-        logger.info(f"LeadQualificationAgent: Checked {len(campaign_results)} raw items, qualified {qualified_count}, unqualified {unqualified_count}.")
+        logger.info(f"LeadQualificationAgent: Checked {len(campaign_results)} items -> qualified: {qualified_count}, unqualified: {unqualified_count}.")
         
         return {
             'checked': len(campaign_results),

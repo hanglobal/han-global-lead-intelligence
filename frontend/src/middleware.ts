@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getBackendApiUrl } from '@/lib/config';
 
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl;
@@ -23,17 +24,17 @@ export async function middleware(req: NextRequest) {
 
   if (authCookie) {
     try {
-      // Forward request with Basic Auth header to backend verify endpoint
-      const verifyRes = await fetch('http://127.0.0.1:5050/api/users/verify-auth/', {
+      // Forward request with Bearer Auth header to backend verify endpoint
+      const verifyRes = await fetch(`${getBackendApiUrl()}/users/verify-auth/`, {
         headers: {
-          'Authorization': `Basic ${authCookie}`
+          'Authorization': `Bearer ${authCookie}`
         }
       });
 
       if (verifyRes.ok) {
-        // Valid cookie, forward request with Basic Auth header to backend API
+        // Valid cookie, forward request with Bearer Auth header to backend API
         const requestHeaders = new Headers(req.headers);
-        requestHeaders.set('Authorization', `Basic ${authCookie}`);
+        requestHeaders.set('Authorization', `Bearer ${authCookie}`);
         
         return NextResponse.next({
           request: {
@@ -46,9 +47,69 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // If we reach here, user is not authenticated
-  // Redirect to login page
-  const loginUrl = new URL('/login', req.url);
+  // Attempt silent refresh if session token expired or missing but refresh token exists
+  const refreshToken = req.cookies.get('reli_refresh_token')?.value;
+  if (refreshToken) {
+    try {
+      const refreshRes = await fetch(`${getBackendApiUrl()}/token/refresh/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh: refreshToken }),
+      });
+
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        const newAccessToken = refreshData.access;
+        if (newAccessToken) {
+          const requestHeaders = new Headers(req.headers);
+          requestHeaders.set('Authorization', `Bearer ${newAccessToken}`);
+          
+          const response = NextResponse.next({
+            request: {
+              headers: requestHeaders,
+            },
+          });
+
+          response.cookies.set('reli_session_token', newAccessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/',
+            maxAge: 60 * 60, // 1 hour
+          });
+
+          if (refreshData.refresh) {
+            response.cookies.set('reli_refresh_token', refreshData.refresh, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'strict',
+              path: '/',
+              maxAge: 7 * 24 * 60 * 60, // 7 days
+            });
+          }
+
+          return response;
+        }
+      }
+    } catch (e) {
+      console.error("Middleware Refresh Error:", e);
+    }
+  }
+
+  // If user is not authenticated and requesting an API route, return 401 JSON instead of redirecting
+  if (url.pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'token_expired' },
+      { status: 401 }
+    );
+  }
+
+  // For frontend pages, redirect to login page
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host;
+  const protocol = req.headers.get('x-forwarded-proto') || (req.headers.get('referer')?.startsWith('https') ? 'https' : req.nextUrl.protocol.replace(':', ''));
+  const loginUrl = new URL('/login', `${protocol}://${host}`);
   return NextResponse.redirect(loginUrl);
 }
 

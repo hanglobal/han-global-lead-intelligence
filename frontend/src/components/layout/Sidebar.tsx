@@ -10,6 +10,11 @@ const navItems = [
     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
   },
   {
+    href: '/sales',
+    label: 'Sales',
+    icon: 'M12 21a9 9 0 100-18 9 9 0 000 18zm0-3a6 6 0 100-12 6 6 0 000 12zm0-3a3 3 0 100-6 3 3 0 000 6z',
+  },
+  {
     href: '/crm',
     label: 'CRM',
     icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
@@ -26,6 +31,17 @@ const settingsIcon = 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 
 export default function Sidebar() {
   const pathname = usePathname();
 
+  const handleLogout = async () => {
+    try {
+      sessionStorage.removeItem('reli_session_active');
+      await fetch('/auth-api/logout/', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout failed:', e);
+    } finally {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <aside className="w-20 flex-none flex flex-col bg-zinc-950 border-r border-zinc-800/50">
       <div className="h-14 flex items-center justify-center border-b border-zinc-800/50">
@@ -39,13 +55,13 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
+              className={`flex flex-col items-center gap-1 px-1 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
                 active
-                  ? 'bg-primary-500/10 text-primary-300'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  ? 'bg-zinc-800/90 text-white'
+                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
-              <svg className="w-6 h-6 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <svg className="w-5 h-5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
               </svg>
               <span className="text-[10px] leading-tight text-center">{item.label}</span>
@@ -54,20 +70,32 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="px-3 py-3 border-t border-zinc-800/50">
+      <div className="px-3 py-3 border-t border-zinc-800/50 space-y-1">
         <Link
           href="/settings"
-          className={`flex flex-col items-center gap-0.5 px-1 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
+          className={`flex flex-col items-center gap-1 px-1 py-2 rounded-lg text-xs font-medium transition-all duration-150 ${
             pathname === '/settings'
-              ? 'bg-primary-500/10 text-primary-300'
-              : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
+              ? 'bg-zinc-800/90 text-white'
+              : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/60'
           }`}
         >
-          <svg className="w-6 h-6 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+          <svg className="w-5 h-5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={settingsIcon} />
           </svg>
           <span className="text-[10px] leading-tight text-center">Settings</span>
         </Link>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex flex-col items-center gap-1 px-1 py-2 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/60 transition-all duration-150 cursor-pointer"
+          title="Sign out"
+        >
+          <svg className="w-5 h-5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+          </svg>
+          <span className="text-[10px] leading-tight text-center">Logout</span>
+        </button>
       </div>
     </aside>
   );

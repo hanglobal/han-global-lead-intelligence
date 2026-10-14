@@ -110,7 +110,7 @@ class FirecrawlClient:
             kwargs = {
                 'limit': limit,
                 'formats': ['markdown'],
-                'poll_interval': 2
+                'poll_interval': 8  # 8s status polling to stay well under 10 RPM general API rate limit
             }
             if include_paths:
                 kwargs['include_paths'] = include_paths

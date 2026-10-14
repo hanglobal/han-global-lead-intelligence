@@ -57,8 +57,18 @@ frontend.pid
 .env.local
 .env.*.local
 
-# Redis
+# Backups & Large Data Dumps
+backup_*.json
+*.rdb
 dump.rdb
+
+# Temporary Scratch Scripts
+scratch_*.py
+test_campaigns.py
+test_leads.py
+restart_c4.py
+
+# Redis
 
 # OS
 .DS_Store

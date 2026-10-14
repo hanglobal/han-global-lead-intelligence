@@ -1,6 +1,6 @@
 'use client';
 
-import DashboardPanel from '@/components/crm/DashboardPanel';
+import DashboardPanel from '@/app/(dashboard)/crm/components/DashboardPanel';
 
 export default function DashboardPage() {
   return (

@@ -4,14 +4,20 @@ from apps.crm.models import Lead
 logger = logging.getLogger(__name__)
 
 
+def _get_item_pid(item):
+    if not isinstance(item, dict):
+        return ''
+    return str(item.get('placeId') or item.get('id') or item.get('email') or item.get('company_domain') or '').strip()
+
+
 class LeadDedupAgent:
     """Responsible for deduplicating leads within a batch and against existing CRM data.
 
-    Does one thing: given raw items, return only the unique ones.
+    Supports both Google Maps (placeId) and Nexus Data Solutions (id / domain / email).
     """
 
     @staticmethod
-    def run(items, place_id_to_result=None):
+    def run(items, place_id_to_result=None, campaign_id=None, is_b2b=False):
         if not items:
             return {
                 'unique_items': [],
@@ -20,45 +26,79 @@ class LeadDedupAgent:
 
         seen = {}
         for item in items:
-            pid = item.get('placeId', '')
+            pid = _get_item_pid(item)
             if not pid:
                 continue
             if pid not in seen:
                 seen[pid] = item
 
         from apps.lead_hunter.models import CampaignResult
-        existing_crm_pids = set(
-            Lead.objects.filter(place_id__in=seen.keys()).values_list('place_id', flat=True)
-        )
-        existing_staging_pids = set(
-            CampaignResult.objects.filter(place_id__in=seen.keys()).values_list('place_id', flat=True)
-        )
-        
-        all_existing_pids = existing_crm_pids | existing_staging_pids
 
-        unique_items = [item for pid, item in seen.items() if pid not in all_existing_pids]
+        if is_b2b:
+            # ── B2B Lead Engine (Nexus) ──────────────────────────────────────
+            # Clients can run the same B2B campaign repeatedly to source fresh leads.
+            # Deduplication only removes intra-batch duplicates (same lead multiple times in one API response).
+            # It does NOT reject leads as duplicates against CRM or prior runs so clients can re-run without issues.
+            unique_items = list(seen.values())
+            stats = {
+                'total': len(items),
+                'batch_duplicates': len(items) - len(seen),
+                'crm_duplicates': 0,
+            }
 
-        stats = {
-            'total': len(items),
-            'batch_duplicates': len(items) - len(seen),
-            'crm_duplicates': len(all_existing_pids & seen.keys()),
-        }
+            if place_id_to_result:
+                unique_pids = set(_get_item_pid(item) for item in unique_items if _get_item_pid(item))
+                unique_cr_ids = [place_id_to_result[pid].id for pid in unique_pids if pid in place_id_to_result]
+                if unique_cr_ids:
+                    CampaignResult.objects.filter(id__in=unique_cr_ids).update(
+                        is_duplicate=False,
+                        qualification_status='pending'
+                    )
 
-        # Update the is_duplicate flag in the database
-        if place_id_to_result:
-            duplicate_pids = set(pid for pid in place_id_to_result.keys()) - set(item.get('placeId') for item in unique_items if item.get('placeId'))
-            unique_pids = set(item.get('placeId') for item in unique_items if item.get('placeId'))
+                batch_dup_pids = set(place_id_to_result.keys()) - unique_pids
+                batch_dup_ids = [place_id_to_result[pid].id for pid in batch_dup_pids if pid in place_id_to_result]
+                if batch_dup_ids:
+                    CampaignResult.objects.filter(id__in=batch_dup_ids).update(
+                        is_duplicate=True,
+                        qualification_status='unqualified'
+                    )
+        else:
+            # ── Non-B2B Legacy Flow (e.g. Google Maps) ──────────────────────
+            existing_crm_pids = set(
+                Lead.objects.filter(place_id__in=seen.keys()).values_list('place_id', flat=True)
+            )
             
-            duplicate_cr_ids = [place_id_to_result[pid].id for pid in duplicate_pids if pid in place_id_to_result]
-            unique_cr_ids = [place_id_to_result[pid].id for pid in unique_pids if pid in place_id_to_result]
+            staging_qs = CampaignResult.objects.filter(place_id__in=seen.keys())
+            if campaign_id:
+                staging_qs = staging_qs.exclude(campaign_id=campaign_id)
+            existing_staging_pids = set(staging_qs.values_list('place_id', flat=True))
             
-            if duplicate_cr_ids:
-                CampaignResult.objects.filter(id__in=duplicate_cr_ids).update(is_duplicate=True)
-            if unique_cr_ids:
-                CampaignResult.objects.filter(id__in=unique_cr_ids).update(is_duplicate=False)
+            all_existing_pids = existing_crm_pids | existing_staging_pids
+            unique_items = [item for pid, item in seen.items() if pid not in all_existing_pids]
+
+            stats = {
+                'total': len(items),
+                'batch_duplicates': len(items) - len(seen),
+                'crm_duplicates': len(all_existing_pids & seen.keys()),
+            }
+
+            if place_id_to_result:
+                unique_pids = set(_get_item_pid(item) for item in unique_items if _get_item_pid(item))
+                unique_cr_ids = [place_id_to_result[pid].id for pid in unique_pids if pid in place_id_to_result]
+                if unique_cr_ids:
+                    CampaignResult.objects.filter(id__in=unique_cr_ids).update(is_duplicate=False)
+                
+                # Scope duplicate marking ONLY to the current batch's results (never historical records)
+                duplicate_pids = set(place_id_to_result.keys()) - unique_pids
+                duplicate_cr_ids = [place_id_to_result[pid].id for pid in duplicate_pids if pid in place_id_to_result]
+                if duplicate_cr_ids:
+                    CampaignResult.objects.filter(id__in=duplicate_cr_ids).update(
+                        is_duplicate=True,
+                        qualification_status='unqualified'
+                    )
 
         logger.info(
-            f"DedupAgent: {stats['total']} total, "
+            f"DedupAgent [is_b2b={is_b2b}]: {stats['total']} total, "
             f"{stats['batch_duplicates']} batch dupes, "
             f"{stats['crm_duplicates']} CRM dupes, "
             f"{len(unique_items)} unique"

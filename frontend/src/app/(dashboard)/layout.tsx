@@ -7,14 +7,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Enforce strict tab session
-    if (!sessionStorage.getItem('reli_session_active')) {
-      fetch('/auth-api/logout/', { method: 'POST' }).then(() => {
-        window.location.href = '/login';
-      });
-      return;
-    }
-    
+    // Keep tab session marked active
+    sessionStorage.setItem('reli_session_active', 'true');
     setMounted(true);
     
     const sse = new EventSource('/api/lead-hunter/stream/');
